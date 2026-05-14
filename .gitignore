@@ -12,4 +12,6 @@ instance/*.sqlite
 ~$*.xlsx
 .claude/
 .cursor/
-.vscode/
+.vscode/*.xlsx
+*.xls
+*.csv
