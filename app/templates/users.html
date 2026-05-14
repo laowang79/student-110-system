@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 学生110事件数据处理系统{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-users me-2"></i> 系统用户与权限管理</span>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="fa-solid fa-user-plus"></i> 新增操作员
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>序号</th>
+                                <th>登录账号</th>
+                                <th>角色权限</th>
+                                <th>所属部门 (处警单位)</th>
+                                <th class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in users %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td><span class="fw-bold">{{ u.username }}</span></td>
+                                <td>
+                                    {% if u.role == 'admin' %}
+                                        <span class="badge bg-danger">一级管理员</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">二级操作员</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="text-secondary">{{ u.department or '全系统 (无限制)' }}</span></td>
+                                <td class="text-end">
+                                    {% if u.role != 'admin' %}
+                                    <button class="btn btn-sm btn-outline-danger btn-delete-user" data-id="{{ u.id }}">删除</button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-outline-secondary" disabled>不可删</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新增二级操作员</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">登录账号</label>
+                    <input type="text" class="form-control" id="input-username" placeholder="建议使用姓名或警号">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">登录密码</label>
+                    <input type="password" class="form-control" id="input-password" placeholder="设置初始密码">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">所属部门 (处警单位)</label>
+                    <input type="text" class="form-control" id="input-department" placeholder="必须与表格中处警单位名称一致">
+                    <div class="form-text text-danger">注意：操作员登录后，只能查看到【处警单位】等于该名称的数据。</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btn-save-user">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('btn-save-user').addEventListener('click', () => {
+        const username = document.getElementById('input-username').value;
+        const password = document.getElementById('input-password').value;
+        const department = document.getElementById('input-department').value;
+        
+        if(!username || !password || !department) {
+            Swal.fire('提示', '请填写完整账号、密码和部门信息', 'warning');
+            return;
+        }
+
+        fetch('{{ url_for("main.add_user") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username, password, department, role: 'operator'})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.success) location.reload();
+            else Swal.fire('失败', res.message, 'error');
+        });
+    });
+
+    document.querySelectorAll('.btn-delete-user').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.getAttribute('data-id');
+            Swal.fire({
+                title: '确定删除该操作员?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: '确定删除'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/users/${id}`, { method: 'DELETE' })
+                    .then(res => res.json()).then(res => {
+                        if(res.success) location.reload();
+                        else Swal.fire('错误', res.message, 'error');
+                    });
+                }
+            })
+        });
+    });
+</script>
+{% endblock %}

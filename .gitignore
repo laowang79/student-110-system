@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+uploads/
+instance/*.sqlite
+*.sqlite3
+~$*.xlsx
+.claude/
+.cursor/
+.vscode/

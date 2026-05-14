@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}数据工作台 - 学生110事件数据处理系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4" id="upload-section">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center p-5" id="upload-area" style="border: 2px dashed #d1d9e6; border-radius: 10px; background-color: #f8fafc; cursor: pointer;">
+                <i class="fa-solid fa-cloud-arrow-up fa-3x text-primary mb-3"></i>
+                <h5 class="mb-2">点击或拖拽上传 Excel 数据表格</h5>
+                <p class="text-muted mb-0">系统将自动进行数据清洗、格式化及学校名称智能补全</p>
+                <input type="file" id="file-input" style="display: none;" accept=".xlsx, .xls">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row d-none" id="workspace">
+    <!-- 表格视图 -->
+    <div class="col-12" id="table-view">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-list-check me-2"></i> 数据预览与编辑修正 (限制显示重点字段)</span>
+                <div>
+                    <span class="badge bg-success me-2" id="stats-total">总记录: 0</span>
+                    <button class="btn btn-sm btn-primary" id="btn-export"><i class="fa-solid fa-download"></i> 导出最终表格</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="data-table"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 卡片式修改视图 -->
+    <div class="col-12 d-none" id="edit-view">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <span class="fw-bold text-primary fs-5"><i class="fa-solid fa-pen-to-square me-2"></i> 数据详细卡片修正</span>
+                <div>
+                    <button class="btn btn-outline-secondary me-2" id="btn-cancel-edit"><i class="fa-solid fa-arrow-left"></i> 取消返回</button>
+                    <button class="btn btn-success" id="btn-save-edit"><i class="fa-solid fa-check"></i> 保存修改</button>
+                </div>
+            </div>
+            <div class="card-body" style="background-color: #f4f7f6;">
+                <form id="edit-form">
+                    <div class="row g-3" id="edit-form-content">
+                        <!-- 动态生成的卡片表单将插入这里 -->
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let table;
+    let currentRow = null;
+    let originalColumns = []; // 用于保存导入时的原始表头顺序
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const uploadSection = document.getElementById('upload-section');
+    const workspace = document.getElementById('workspace');
+    const tableView = document.getElementById('table-view');
+    const editView = document.getElementById('edit-view');
+    const btnExport = document.getElementById('btn-export');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', handleUpload);
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.style.backgroundColor = '#eef2f7';
+    });
+
+    uploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        uploadArea.style.backgroundColor = '#f8fafc';
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.style.backgroundColor = '#f8fafc';
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            handleUpload();
+        }
+    });
+
+    function handleUpload() {
+        if (!fileInput.files.length) return;
+        
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        Swal.fire({
+            title: '正在处理数据...',
+            text: '包含智能提取和清洗补全',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch('{{ url_for("main.upload_file") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(res => {
+            if (res.success) {
+                Swal.close();
+                Swal.fire({
+                    title: '导入完成', 
+                    html: `
+                        <div class="text-start mt-3">
+                            <p><i class="fa-solid fa-file-excel text-primary me-2"></i> 表格总记录数: <strong class="text-primary">${res.data.stats.total}</strong> 条</p>
+                            <p><i class="fa-solid fa-circle-check text-success me-2"></i> 成功导入并保存: <strong class="text-success">${res.data.stats.imported}</strong> 条</p>
+                            <p><i class="fa-solid fa-copy text-warning me-2"></i> 发现重复跳过: <strong class="text-warning">${res.data.stats.duplicates}</strong> 条</p>
+                            <p><i class="fa-solid fa-wand-magic-sparkles text-info me-2"></i> 智能补全学校: <strong class="text-info">${res.data.stats.completed_schools}</strong> 条</p>
+                        </div>
+                    `,
+                    icon: 'success',
+                    confirmButtonText: '查看数据'
+                });
+                originalColumns = res.columns; // 保存原始表头顺序
+                initTable(res.data.records);
+                uploadSection.classList.add('d-none');
+                workspace.classList.remove('d-none');
+                document.getElementById('stats-total').innerText = `本次导入呈现: ${res.data.records.length} 条`;
+            } else {
+                Swal.fire('错误', res.message, 'error');
+            }
+        })
+        .catch(err => {
+            Swal.fire('错误', '网络请求失败', 'error');
+        });
+    }
+
+    function initTable(data) {
+        if(data.length === 0) return;
+        
+        const allKeys = Object.keys(data[0]);
+        let visibleFields = ['接警时间', '处警单位', '报警人', '事发地址', '事件详情', '处理结果', '学校名称'];
+        visibleFields = visibleFields.filter(f => allKeys.includes(f));
+        if (visibleFields.length === 0) visibleFields = allKeys.slice(0, 6);
+
+        const columns = visibleFields.map(key => {
+            return {
+                title: key,
+                field: key,
+                headerFilter: "input",
+                // 文字截断格式化
+                formatter: function(cell){
+                    let val = cell.getValue();
+                    if(val && typeof val === 'string' && val.length > 15) {
+                        return val.substring(0, 15) + '...';
+                    }
+                    return val;
+                },
+                tooltip: true
+            };
+        });
+
+        // 增加操作列
+        columns.push({
+            title: "操作",
+            headerSort: false,
+            formatter: function(){ 
+                return "<button class='btn btn-sm btn-outline-primary py-0'><i class='fa-solid fa-pen'></i> 修正数据</button>"; 
+            },
+            width: 110,
+            hozAlign: "center",
+            cellClick: function(e, cell){
+                openEditView(cell.getRow());
+            }
+        });
+
+        table = new Tabulator("#data-table", {
+            data: data,
+            columns: columns,
+            layout: "fitColumns", // 强制一页内容显示，没有横向滚动条
+            height: "calc(100vh - 200px)",
+            pagination: "local",
+            paginationSize: 50,
+            history: true,
+            reactiveData: true,
+        });
+    }
+
+    // 开启卡片式修改视图
+    function openEditView(row) {
+        currentRow = row;
+        const data = row.getData();
+        const contentDiv = document.getElementById('edit-form-content');
+        contentDiv.innerHTML = '';
+
+        const targetPrefixes = [
+            "报警人基本信息", "学校名称", "学校阶段", "原因类型", 
+            "校内外", "发案地点类型", "处置结果", "是否重复报警", 
+            "是否闭环", "下一步拟采取措施"
+        ];
+
+        function isTargetField(key) {
+            return targetPrefixes.some(prefix => key.includes(prefix));
+        }
+
+        // 管理员工作台默认有最高权限
+        const isAdmin = true;
+
+        // 重新排序：允许修改的重点字段排在前面
+        let sortedKeys = [...originalColumns];
+        sortedKeys.sort((a, b) => {
+            let aIsTarget = isTargetField(a);
+            let bIsTarget = isTargetField(b);
+            if (aIsTarget && !bIsTarget) return -1;
+            if (!aIsTarget && bIsTarget) return 1;
+            return originalColumns.indexOf(a) - originalColumns.indexOf(b);
+        });
+
+        let hasShownEditableHeader = false;
+        let hasShownReadonlyHeader = false;
+
+        // 按照重排后的顺序遍历生成卡片
+        sortedKeys.forEach(key => {
+            if (data.hasOwnProperty(key)) {
+                const isTarget = isTargetField(key);
+                
+                // 插入分区标题
+                if (isTarget && !hasShownEditableHeader) {
+                    contentDiv.insertAdjacentHTML('beforeend', '<div class="col-12 mt-2 mb-2"><h6 class="text-primary border-bottom pb-2 fw-bold"><i class="fa-solid fa-pen-to-square"></i> 需核查与补充信息</h6></div>');
+                    hasShownEditableHeader = true;
+                }
+                if (!isTarget && !hasShownReadonlyHeader) {
+                    contentDiv.insertAdjacentHTML('beforeend', '<div class="col-12 mt-4 mb-2"><h6 class="text-secondary border-bottom pb-2 fw-bold"><i class="fa-solid fa-layer-group"></i> 基础警情信息</h6></div>');
+                    hasShownReadonlyHeader = true;
+                }
+
+                // 判断是否是长文本字段或长表头
+                const isLongText = ['事件详情', '处理结果'].includes(key) || (typeof data[key] === 'string' && data[key].length > 40) || key.length > 15;
+                
+                const fieldHtml = `
+                    <div class="${isLongText ? 'col-12' : 'col-md-6 col-lg-4'}">
+                        <div class="card h-100 shadow-sm" style="border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <div class="card-body p-3">
+                                <label class="form-label text-secondary fw-bold small mb-2"><i class="fa-solid fa-tag me-1"></i> ${key}</label>
+                                ${isLongText ? 
+                                    `<textarea class="form-control border-0 edit-input" data-key="${key}" rows="4" style="background-color: #f8fafc;">${data[key] || ''}</textarea>` : 
+                                    `<input type="text" class="form-control border-0 edit-input" data-key="${key}" value="${data[key] || ''}" style="background-color: #f8fafc;">`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+                contentDiv.insertAdjacentHTML('beforeend', fieldHtml);
+            }
+        });
+
+        // 切换视图
+        tableView.classList.add('d-none');
+        editView.classList.remove('d-none');
+    }
+
+    // 关闭修改视图
+    document.getElementById('btn-cancel-edit').addEventListener('click', () => {
+        editView.classList.add('d-none');
+        tableView.classList.remove('d-none');
+        currentRow = null;
+    });
+
+    // 保存修改
+    document.getElementById('btn-save-edit').addEventListener('click', () => {
+        if(currentRow) {
+            const inputs = document.querySelectorAll('.edit-input');
+            let newData = {};
+            inputs.forEach(input => {
+                newData[input.getAttribute('data-key')] = input.value;
+            });
+            currentRow.update(newData); // 更新 Tabulator 表格中对应行的数据
+            
+            // 同步保存到数据库
+            fetch('{{ url_for("main.update_record") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newData)
+            }).then(res => res.json()).then(res => {
+                if(!res.success) {
+                    console.warn("DB Update Info:", res.message);
+                }
+            });
+
+            Swal.fire({
+                title: '修改已保存并入库',
+                icon: 'success',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2000
+            });
+
+            // 切换回表格视图
+            editView.classList.add('d-none');
+            tableView.classList.remove('d-none');
+            currentRow = null;
+        }
+    });
+
+    // 导出最终表格
+    btnExport.addEventListener('click', () => {
+        if(!table) return;
+        const currentData = table.getData();
+        
+        Swal.fire({
+            title: '准备导出...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch('{{ url_for("main.export_data") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                data: currentData,
+                columns: originalColumns // 导出时传回原始表头顺序
+            })
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.success) {
+                Swal.close();
+                window.location.href = res.download_url;
+            } else {
+                Swal.fire('导出失败', res.message, 'error');
+            }
+        });
+    });
+</script>
+{% endblock %}

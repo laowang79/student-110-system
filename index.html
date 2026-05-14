@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生警情数据清洗系统</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--primary:#4f46e5;--primary-hover:#4338ca;--danger:#dc2626;--warning:#f59e0b;--success:#16a34a;--info:#0ea5e9;--border:#e2e8f0;--text:#1e293b;--text-light:#64748b;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+.app{max-width:100%;padding:16px}
+.header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-radius:var(--radius);box-shadow:var(--shadow)}
+.header h1{font-size:20px;font-weight:700;color:var(--primary)}
+.header .stats{display:flex;gap:20px;font-size:13px;color:var(--text-light)}
+.header .stats span{background:var(--bg);padding:4px 12px;border-radius:20px}
+.tabs{display:flex;gap:2px;margin-bottom:16px;background:var(--card);border-radius:var(--radius);padding:4px;box-shadow:var(--shadow)}
+.tab{padding:10px 20px;border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:14px;color:var(--text-light);transition:all .2s;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text);background:var(--bg)}
+.tab.active{background:var(--primary);color:#fff}
+.tab .badge{background:rgba(255,255,255,.3);color:inherit;font-size:11px;padding:1px 7px;border-radius:10px;min-width:20px;text-align:center}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+.card-title{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--text)}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .2s;background:#fafbfc}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:#f0f0ff}
+.upload-zone svg{width:48px;height:48px;color:var(--text-light);margin-bottom:12px}
+.upload-zone p{color:var(--text-light);font-size:14px}
+.upload-zone .hint{font-size:12px;color:var(--text-light);margin-top:8px}
+input[type="file"]{display:none}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:6px;font-size:13px;cursor:pointer;transition:all .2s;font-weight:500}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-success{background:var(--success);color:#fff}
+.btn-success:hover{background:#15803d}
+.btn-warning{background:var(--warning);color:#fff}
+.btn-warning:hover{background:#d97706}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:var(--bg)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-info{background:var(--info);color:#fff}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.table-wrap{overflow-x:auto;max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+th{position:sticky;top:0;background:#f8fafc;border-bottom:2px solid var(--border);padding:8px 10px;text-align:left;font-weight:600;color:var(--text);z-index:1;min-width:100px}
+td{padding:6px 10px;border-bottom:1px solid var(--border);max-width:250px;overflow:hidden;text-overflow:ellipsis}
+tr:hover td{background:#f8fafc}
+.cell-dirty{background:#fef3c7!important}
+.cell-error{background:#fee2e2!important}
+.cell-empty{background:#f0f0f0!important}
+.cell-editing{padding:0!important}
+.cell-editing input,.cell-editing textarea{width:100%;min-width:150px;border:2px solid var(--primary);border-radius:4px;padding:4px 8px;font-size:12px;outline:none;resize:none;font-family:inherit}
+.cell-editing textarea{min-height:60px}
+.col-issue{color:var(--warning)}
+.col-clean{color:var(--success)}
+.clean-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.clean-item{background:var(--bg);padding:12px;border-radius:var(--radius);text-align:center}
+.clean-item .num{font-size:24px;font-weight:700}
+.clean-item .lbl{font-size:12px;color:var(--text-light)}
+.clean-item.warn .num{color:var(--warning)}
+.clean-item.err .num{color:var(--danger)}
+.clean-item.ok .num{color:var(--success)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--card);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.2);width:90%;max-width:600px;max-height:80vh;display:flex;flex-direction:column}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:16px;margin:0}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.input-group{display:flex;gap:8px;margin-bottom:12px}
+.input-group input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;outline:none}
+.input-group input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.school-list{max-height:300px;overflow-y:auto}
+.school-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);font-size:14px}
+.school-item:hover{background:var(--bg)}
+.school-item button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;padding:0 4px}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filter-bar input,.filter-bar select{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--primary)}
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0}
+.pagination button{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:pointer;font-size:13px}
+.pagination button:disabled{opacity:.5;cursor:default}
+.pagination button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-light)}
+.empty-state svg{width:64px;height:64px;margin-bottom:16px;color:var(--border)}
+.toast{position:fixed;top:20px;right:20px;z-index:200;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:all .3s}
+.toast-success{background:var(--success)}
+.toast-error{background:var(--danger)}
+.toast-info{background:var(--info)}
+.section-title{font-size:14px;font-weight:600;margin:16px 0 8px;color:var(--text);display:flex;align-items:center;gap:8px}
+.match-preview{font-size:12px;background:var(--bg);padding:8px 12px;border-radius:6px;margin-top:8px;max-height:300px;overflow-y:auto}
+.match-preview .row-item{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.match-preview .row-num{color:var(--text-light);min-width:40px;font-weight:600}
+.match-preview .extracted{color:var(--success);min-width:120px}
+.match-preview .original{color:var(--text-light);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.fade-enter-active,.fade-leave-active{transition:opacity .2s}
+.fade-enter-from,.fade-leave-to{opacity:0}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="app">
+    <!-- Header -->
+    <div class="header">
+      <h1>📋 学生警情数据清洗系统</h1>
+      <div class="stats" v-if="fileData.length">
+        <span>📊 {{ fileData.length }} 条记录</span>
+        <span>📏 {{ columns.length }} 个字段</span>
+        <span v-if="cleaningDone">🔍 {{ totalIssues }} 个问题</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab" :class="{active:tab==='upload'}" @click="tab='upload'">
+        📤 上传
+      </button>
+      <button class="tab" :class="{active:tab==='clean'}" @click="tab='clean'" :disabled="!fileData.length">
+        🧹 清洗 <span class="badge" v-if="totalIssues">{{totalIssues}}</span>
+      </button>
+      <button class="tab" :class="{active:tab==='extract'}" @click="tab='extract'" :disabled="!fileData.length">
+        🏫 学校提取 <span class="badge" v-if="extractCount">{{extractCount}}</span>
+      </button>
+      <button class="tab" :class="{active:tab==='edit'}" @click="tab='edit'" :disabled="!fileData.length">
+        ✏️ 编辑 <span class="badge" v-if="modifiedCount">{{modifiedCount}}</span>
+      </button>
+      <button class="tab" :class="{active:tab==='export'}" @click="tab='export'" :disabled="!fileData.length">
+        💾 导出
+      </button>
+    </div>
+
+    <!-- TAB: Upload -->
+    <div v-if="tab==='upload'">
+      <div class="card">
+        <div class="upload-zone"
+             :class="{dragover:dragOver}"
+             @click="$refs.fileInput.click()"
+             @dragover.prevent="dragOver=true"
+             @dragleave="dragOver=false"
+             @drop.prevent="handleDrop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16"/></svg>
+          <p><strong>点击上传</strong> 或拖拽 .xlsx / .xls 文件到此处</p>
+          <p class="hint">支持合并单元格、多 Sheet（仅读取第一个）</p>
+        </div>
+        <input type="file" ref="fileInput" accept=".xlsx,.xls" @change="handleFile">
+      </div>
+
+      <div class="card" v-if="fileData.length">
+        <div class="card-title">📋 数据预览（前50行）</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th v-for="(c,i) in columns" :key="i">{{c}}<br><small style="color:var(--text-light)">[{{i+1}}]</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row,ri) in previewRows" :key="ri">
+                <td style="font-weight:600;color:var(--text-light)">{{ri+1}}</td>
+                <td v-for="(c,ci) in columns" :key="ci" :title="row[ci]">{{row[ci]}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Clean -->
+    <div v-if="tab==='clean'">
+      <div class="card">
+        <div class="card-title">🧹 数据清洗</div>
+        <div class="clean-summary" v-if="cleaningDone">
+          <div class="clean-item ok"><div class="num">{{fileData.length - totalIssuesRows}}</div><div class="lbl">正常记录</div></div>
+          <div class="clean-item warn" v-if="phoneIssues"><div class="num">{{phoneIssues}}</div><div class="lbl">电话格式问题</div></div>
+          <div class="clean-item warn" v-if="idIssues"><div class="num">{{idIssues}}</div><div class="lbl">身份证格式问题</div></div>
+          <div class="clean-item err" v-if="dateIssues"><div class="num">{{dateIssues}}</div><div class="lbl">日期格式问题</div></div>
+          <div class="clean-item err" v-if="emptyIssues"><div class="num">{{emptyIssues}}</div><div class="lbl">空白必填字段</div></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" @click="runClean">🔍 执行清洗</button>
+          <button class="btn btn-outline" @click="autoFix" v-if="cleaningDone && totalIssues>0">🔧 自动修正（能修的）</button>
+        </div>
+        <div v-if="cleaningDone" class="section-title">
+          清洗详情
+          <span style="font-weight:400;color:var(--text-light)">（红色=格式错误，灰色=空白，黄色=已修改）</span>
+        </div>
+        <div class="table-wrap" v-if="cleaningDone && totalIssues>0">
+          <table>
+            <thead>
+              <tr><th>行号</th><th>字段</th><th>当前值</th><th>问题</th><th>建议修正</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(issue,ii) in cleaningIssues" :key="ii">
+                <td>{{issue.row+1}}</td>
+                <td>{{issue.col}}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">{{issue.value}}</td>
+                <td style="color:var(--danger)">{{issue.desc}}</td>
+                <td style="color:var(--success)">{{issue.suggest||'-'}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="cleaningDone && totalIssues===0" style="text-align:center;padding:40px;color:var(--success);font-size:16px">
+          ✅ 数据格式正常，未发现问题
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Extract -->
+    <div v-if="tab==='extract'">
+      <div class="card">
+        <div class="card-title">🏫 学校名称提取</div>
+        <div class="actions">
+          <button class="btn btn-primary" @click="runExtract">🔍 自动提取学校名称</button>
+          <button class="btn btn-outline" @click="showSchoolDict=true">📚 管理学校字典 ({{schoolDict.length}} 所)</button>
+          <button class="btn btn-outline" @click="clearExtract" v-if="extractCount>0">🗑 清除提取结果</button>
+        </div>
+        <div class="section-title" v-if="extractDone">提取详情（来源字段：处理结果）</div>
+        <div class="match-preview" v-if="extractDone">
+          <div class="row-item" v-for="(er,eri) in extractResults" :key="eri">
+            <span class="row-num">行{{er.row+1}}</span>
+            <span class="extracted">{{ er.schools || '(未识别到学校)' }}</span>
+            <span class="original">{{ er.snippet }}</span>
+          </div>
+        </div>
+        <div v-if="extractDone && extractCount===0" style="text-align:center;padding:40px;color:var(--warning)">
+          ⚠️ 未识别到学校名称，请确认"处理结果"字段内容或添加自定义学校到字典
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Edit -->
+    <div v-if="tab==='edit'">
+      <div class="card">
+        <div class="card-title">✏️ 手动编辑</div>
+        <div class="filter-bar">
+          <input type="text" v-model="editSearch" placeholder="🔍 搜索关键字..." style="width:200px">
+          <select v-model="editColFilter">
+            <option value="">全部字段</option>
+            <option v-for="(c,i) in columns" :key="i" :value="c">{{c}}</option>
+          </select>
+          <span style="font-size:12px;color:var(--text-light)">双击单元格编辑 | Tab切换 | 黄色=已修改</span>
+        </div>
+        <div class="table-wrap" style="max-height:55vh">
+          <table>
+            <thead>
+              <tr><th style="min-width:40px">#</th>
+                <th v-for="(c,i) in showEditCols" :key="i"
+                    :style="{minWidth: c==='处理结果'||c==='事件详情'?'250px':'120px'}">
+                  {{c}}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row,ri) in filteredEditData" :key="ri">
+                <td style="font-weight:600;color:var(--text-light)">{{row._idx+1}}</td>
+                <td v-for="(c,ci) in showEditCols" :key="ci"
+                    :class="{'cell-dirty': isDirty(row._idx,c), 'cell-error': hasError(row._idx,c)}"
+                    @dblclick="startEdit(row._idx,c,$event)">
+                  <template v-if="editing.row===row._idx && editing.col===c">
+                    <textarea v-if="c==='处理结果'||c==='事件详情'"
+                      v-model="editing.value"
+                      @keydown.enter.shift.exact="nextEditVertical(row._idx,c)"
+                      @keydown.tab.prevent="nextEdit(row._idx,c)"
+                      @keydown.escape="cancelEdit"
+                      @blur="commitEdit"
+                      ref="editInput" rows="3"></textarea>
+                    <input v-else
+                      v-model="editing.value"
+                      @keydown.enter="nextEditVertical(row._idx,c)"
+                      @keydown.tab.prevent="nextEdit(row._idx,c)"
+                      @keydown.escape="cancelEdit"
+                      @blur="commitEdit"
+                      ref="editInput">
+                  </template>
+                  <template v-else>
+                    <span style="display:inline-block;min-width:20px;min-height:18px"
+                          :title="getVal(row._idx,c)">
+                      {{ getVal(row._idx,c) }}
+                    </span>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button :disabled="editPage<=1" @click="editPage--">上一页</button>
+          <button class="active">{{editPage}} / {{editTotalPages}}</button>
+          <button :disabled="editPage>=editTotalPages" @click="editPage++">下一页</button>
+          <span style="font-size:12px;color:var(--text-light)">共 {{filteredEditData.length}} 条</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Export -->
+    <div v-if="tab==='export'">
+      <div class="card">
+        <div class="card-title">💾 导出最终表格</div>
+        <div class="clean-summary">
+          <div class="clean-item ok"><div class="num">{{fileData.length}}</div><div class="lbl">总记录数</div></div>
+          <div class="clean-item ok"><div class="num">{{columns.length + extraCols.length}}</div><div class="lbl">总字段数</div></div>
+          <div class="clean-item warn"><div class="num">{{extractCount}}</div><div class="lbl">已提取学校</div></div>
+          <div class="clean-item ok"><div class="num">{{modifiedCount}}</div><div class="lbl">人工修改</div></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-success" @click="exportExcel">📥 导出 Excel (.xlsx)</button>
+          <button class="btn btn-outline" @click="exportCSV">📄 导出 CSV</button>
+        </div>
+        <div class="section-title">导出预览（含"学校名称"列）</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th v-for="(c,i) in exportColumns" :key="i">{{c}}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row,ri) in previewRows" :key="ri">
+                <td>{{ri+1}}</td>
+                <td v-for="(c,ci) in exportColumns" :key="ci">{{getExportVal(ri,c)}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: School Dictionary -->
+    <div class="modal-overlay" v-if="showSchoolDict" @click.self="showSchoolDict=false">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>📚 学校字典管理</h3>
+          <button class="btn btn-outline btn-sm" @click="showSchoolDict=false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <input type="text" v-model="newSchoolName" placeholder="输入学校全称，如：金山中学"
+                   @keydown.enter="addSchool">
+            <button class="btn btn-primary" @click="addSchool">添加</button>
+          </div>
+          <p style="font-size:12px;color:var(--text-light);margin-bottom:8px">
+            提示：匹配规则自动识别"XX中学/小学/大学"等后缀，字典用于补充非标准命名的学校
+          </p>
+          <div class="school-list">
+            <div class="school-item" v-for="(s,i) in schoolDict" :key="i">
+              <span>{{s}}</span>
+              <button @click="removeSchool(i)" title="删除">×</button>
+            </div>
+            <div v-if="!schoolDict.length" style="text-align:center;padding:30px;color:var(--text-light)">
+              暂无自定义学校，系统会自动匹配「XX中学/小学/大学」等标准后缀
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="resetSchoolDict">恢复默认字典</button>
+          <button class="btn btn-primary" @click="showSchoolDict=false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" :class="'toast-'+toastType" v-if="toastMsg" style="top:20px;right:20px">
+      {{ toastMsg }}
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, nextTick, onMounted } = Vue;
+
+createApp({
+  setup(){
+    // ── State ──
+    const tab = ref('upload');
+    const fileData = ref([]);
+    const columns = ref([]);
+    const originalData = ref([]); // deep clone for change tracking
+    const extraCols = ref(['学校名称','学校阶段','原因类型','校内外','发案地点类型','处置结果（详细）','是否重复报警','是否闭环','下一步拟采取措施']);
+    const dragOver = ref(false);
+    const cleaningDone = ref(false);
+    const cleaningIssues = ref([]);
+
+    // Edit state
+    const editing = reactive({row:-1,col:'',value:''});
+    const modifiedCells = ref({}); // "row-col" -> newVal
+    const editSearch = ref('');
+    const editColFilter = ref('');
+    const editPage = ref(1);
+    const editPageSize = 20;
+
+    // Extract state
+    const extractDone = ref(false);
+    const extractResults = ref([]);
+    const schoolDict = ref([]);
+    const showSchoolDict = ref(false);
+    const newSchoolName = ref('');
+
+    // Toast
+    const toastMsg = ref('');
+    const toastType = ref('info');
+    let toastTimer = null;
+
+    // ── Default schools (金山及上海常见学校) ──
+    const defaultSchools = [
+      '金山中学','华师大三附中','张堰中学','亭林中学','枫泾中学','朱泾中学',
+      '廊下中学','松隐中学','漕泾中学','山阳中学','吕巷中学','蒙山中学','罗星中学',
+      '金山初级中学','前京中学','亭新中学','西林中学','松江二中','金山世外',
+      '金山区第一实验小学','金山区第二实验小学','海棠小学','金山小学',
+      '金卫小学','金卫中学','金山世外学校','金盟学校','交大南洋中学','上海石化工业学校',
+      '食品科技学校','金山区劳技学校',
+      '漕泾小学','亭林小学','朱泾小学','枫泾小学','张堰小学',
+      '廊下小学','松隐小学','山阳小学','吕巷小学',
+      '钱圩中学','钱圩小学','新农学校','干巷学校',
+      '石化幼稚总园','东风幼儿园','罗星幼儿园',
+      '华东理工大学','上海师范大学','上海理工大学',
+      '朱泾二小','兴塔小学','兴塔中学'
+    ];
+
+    const loadSchoolDict = ()=>{
+      try{
+        const d = localStorage.getItem('school-dict-v2');
+        schoolDict.value = d ? JSON.parse(d) : [...defaultSchools];
+      }catch{ schoolDict.value = [...defaultSchools]; }
+    };
+    const saveSchoolDict = ()=> localStorage.setItem('school-dict-v2', JSON.stringify(schoolDict.value));
+
+    onMounted(loadSchoolDict);
+
+    // ── Toast helper ──
+    const toast = (msg,type='info')=>{
+      toastMsg.value = msg;
+      toastType.value = type;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=>toastMsg.value='', 3000);
+    };
+
+    // ── File handling ──
+    const handleFile = (e)=>{
+      const f = e.target.files[0];
+      if(f) parseFile(f);
+    };
+    const handleDrop = (e)=>{
+      dragOver.value = false;
+      const f = e.dataTransfer.files[0];
+      if(f) parseFile(f);
+    };
+
+    const parseFile = (file)=>{
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        try{
+          const wb = XLSX.read(e.target.result, {type:'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(ws, {defval:''});
+          if(!json.length){ toast('表格为空','error'); return; }
+
+          // Get all columns including empty ones
+          const range = XLSX.utils.decode_range(ws['!ref']);
+          const headers = [];
+          for(let C=0; C<=range.e.c; C++){
+            const addr = XLSX.utils.encode_cell({r:0, c:C});
+            const cell = ws[addr];
+            headers.push(cell ? String(cell.v||'').trim() : '');
+          }
+
+          // Filter fully empty trailing columns but keep the structure
+          const data = json.map(row=>{
+            const obj = {};
+            headers.forEach((h,i)=>{
+              if(h) obj[h] = row[h] !== undefined ? String(row[h]||'').trim() : '';
+            });
+            return obj;
+          });
+
+          fileData.value = data;
+          columns.value = headers.filter(h=>h);
+          originalData.value = JSON.parse(JSON.stringify(data));
+          cleaningDone.value = false;
+          cleaningIssues.value = [];
+          extractDone.value = false;
+          extractResults.value = [];
+          modifiedCells.value = {};
+          toast(`成功加载 ${data.length} 条记录，${columns.value.length} 个字段`, 'success');
+        }catch(err){
+          toast('文件解析失败：'+err.message, 'error');
+          console.error(err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    // ── Preview ──
+    const previewRows = computed(()=>fileData.value.slice(0,50));
+
+    // ── Cleaning ──
+    const phoneIssues = computed(()=>cleaningIssues.value.filter(i=>i.type==='phone').length);
+    const idIssues = computed(()=>cleaningIssues.value.filter(i=>i.type==='idcard').length);
+    const dateIssues = computed(()=>cleaningIssues.value.filter(i=>i.type==='date').length);
+    const emptyIssues = computed(()=>cleaningIssues.value.filter(i=>i.type==='empty').length);
+    const totalIssues = computed(()=>cleaningIssues.value.length);
+    const totalIssuesRows = computed(()=>new Set(cleaningIssues.value.map(i=>i.row)).size);
+
+    const findCol = (keywords)=>{
+      return columns.value.find(c=>keywords.some(k=>c.includes(k)));
+    };
+
+    const runClean = ()=>{
+      const issues = [];
+      const phoneCol = findCol(['联系电话','电话']);
+      const idCol = findCol(['身份证']);
+      const dateCol = findCol(['接警时间','时间','日期']);
+      const requiredCols = ['报警人','事发地址','事件详情'];
+
+      fileData.value.forEach((row,ri)=>{
+        // Phone validation
+        if(phoneCol && row[phoneCol]){
+          const v = row[phoneCol].replace(/\s/g,'');
+          if(!/^\d{11}$/.test(v) && !/^\d{3,4}-?\d{7,8}$/.test(v)){
+            const suggest = v.replace(/[^\d]/g,'').slice(0,11);
+            issues.push({row:ri,col:phoneCol,value:v,desc:'电话号码格式异常',type:'phone',suggest: suggest.length===11? suggest: ''});
+          }
+        }
+        // ID card validation
+        if(idCol && row[idCol] && row[idCol]!=='无'){
+          const ids = row[idCol].split(/[\n\r]+/).filter(Boolean);
+          ids.forEach(idPart=>{
+            const pure = idPart.replace(/[^\dXx]/g,'');
+            if(pure && pure.length!==18 && pure.length!==15){
+              issues.push({row:ri,col:idCol,value:idPart.trim().slice(0,40),desc:`身份证号非15/18位(当前${pure.length}位)`,type:'idcard',suggest:''});
+            }
+          });
+        }
+        // Date validation
+        if(dateCol && row[dateCol]){
+          const v = row[dateCol];
+          if(v && !/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(v) && !/^\d{14}$/.test(v)){
+            issues.push({row:ri,col:dateCol,value:v,desc:'日期格式不标准',type:'date',suggest:''});
+          }
+        }
+        // Required field empty check
+        requiredCols.forEach(rc=>{
+          const c = findCol([rc]);
+          if(c && (!row[c] || row[c].trim()==='')){
+            issues.push({row:ri,col:c,value:'(空)',desc:`必填字段"${rc}"为空`,type:'empty',suggest:''});
+          }
+        });
+      });
+
+      cleaningIssues.value = issues;
+      cleaningDone.value = true;
+      toast(`清洗完成：发现 ${issues.length} 个问题`, issues.length?'warn':'success');
+    };
+
+    const autoFix = ()=>{
+      let fixed = 0;
+      cleaningIssues.value.filter(i=>i.type==='phone'&&i.suggest).forEach(i=>{
+        fileData.value[i.row][i.col] = i.suggest;
+        fixed++;
+      });
+      // Re-run clean
+      runClean();
+      toast(`自动修正了 ${fixed} 处电话格式`, 'info');
+    };
+
+    // ── School Extraction ──
+    const extractCount = computed(()=>{
+      if(!extractDone.value) return 0;
+      return extractResults.value.filter(r=>r.schools).length;
+    });
+
+    const buildSchoolPattern = ()=>{
+      // Multi-phase pattern: dict exact match (longest first) + compound suffix + short suffix
+      // Dict exact match (sorted longest first to avoid partial matches)
+      const dictPat = schoolDict.value.length
+        ? [...new Set(schoolDict.value)].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')
+        : null;
+      // Compound suffixes (longer prefix allowed)
+      const compoundSuf = '[一-龥\\d]{3,8}(?:实验学校|实验小学|实验中学|附属中学|附属小学|外国语学校|职业技术学校)';
+      // Short prefix for common suffixes (2-3 chars to avoid grabbing context)
+      const shortSuf = '[一-龥]{2,3}(?:中学|小学|大学|学院|幼儿园)';
+      const parts = [dictPat, compoundSuf, shortSuf].filter(Boolean);
+      return new RegExp(`(${parts.join('|')})`, 'g');
+    };
+
+    // If a regex match contains a dictionary school name as substring, extract the dict school
+    const resolveWithDict = (match)=>{
+      for(const ds of schoolDict.value){
+        if(match.includes(ds) && match !== ds) return ds;
+      }
+      return match;
+    };
+
+    const cleanExtractedNames = (rawMatches)=>{
+      // Step 1: Clean trailing grade/class info
+      let cleaned = rawMatches.map(m=>{
+        m = m.replace(/[（(]\s*[高初小大]?\d*年?[级]?\d*班?\s*[）)]?\s*$/g,'');
+        m = m.replace(/[（(]?[初高]\d班[）)]?$/g,'');
+        m = m.trim();
+        return m;
+      }).filter(Boolean);
+
+      // Step 2: Resolve with dict (dict school inside larger match → use dict school)
+      cleaned = cleaned.map(m=>resolveWithDict(m));
+
+      // Step 3: Deduplicate, remove substrings contained in longer matches
+      const unique = [...new Set(cleaned)].sort((a,b)=>a.length-b.length);
+      const result = [];
+      for(let i=0; i<unique.length; i++){
+        let isSub = false;
+        for(let j=i+1; j<unique.length; j++){
+          if(unique[j].includes(unique[i]) && unique[j] !== unique[i]){
+            isSub = true; break;
+          }
+        }
+        if(!isSub && unique[i].length >= 3) result.push(unique[i]);
+      }
+      return result;
+    };
+
+    const runExtract = ()=>{
+      const col10 = findCol(['处理结果']);
+      if(!col10){ toast('未找到"处理结果"字段','error'); return; }
+
+      const pat = buildSchoolPattern();
+      const results = [];
+
+      fileData.value.forEach((row,ri)=>{
+        const text = row[col10] || '';
+        const matches = [...new Set(text.match(pat)||[])];
+        const cleaned = cleanExtractedNames(matches);
+        const snippet = text.length>80 ? text.slice(0,80)+'...' : text;
+        results.push({row:ri, schools:cleaned.join('；'), snippet});
+      });
+
+      extractResults.value = results;
+      extractDone.value = true;
+
+      // Fill into "学校名称" column if exists
+      const targetCol = findCol(['学校名称']);
+      if(targetCol){
+        results.forEach(r=>{
+          if(r.schools){
+            fileData.value[r.row][targetCol] = r.schools;
+          }
+        });
+        toast(`提取完成：${extractCount.value} 条记录的学校已填入"学校名称"字段`, 'success');
+      } else {
+        // Add the column
+        const newCol = '学校名称';
+        columns.value.push(newCol);
+        fileData.value.forEach((row,ri)=>{
+          row[newCol] = '';
+        });
+        results.forEach(r=>{
+          if(r.schools){
+            fileData.value[r.row][newCol] = r.schools;
+          }
+        });
+        toast(`提取完成：${extractCount.value} 条记录的学校已填入新增"学校名称"字段`, 'success');
+      }
+    };
+
+    const clearExtract = ()=>{
+      const targetCol = findCol(['学校名称']);
+      if(targetCol){
+        fileData.value.forEach(row=>{ row[targetCol] = ''; });
+      }
+      extractResults.value = [];
+      extractDone.value = false;
+      toast('已清除提取结果','info');
+    };
+
+    // ── School Dict ──
+    const addSchool = ()=>{
+      const name = newSchoolName.value.trim();
+      if(!name) return;
+      if(schoolDict.value.includes(name)){ toast('该校已存在','error'); return; }
+      schoolDict.value.push(name);
+      saveSchoolDict();
+      newSchoolName.value = '';
+      toast(`已添加：${name}`,'success');
+    };
+    const removeSchool = (i)=>{
+      const name = schoolDict.value[i];
+      schoolDict.value.splice(i,1);
+      saveSchoolDict();
+      toast(`已删除：${name}`,'info');
+    };
+    const resetSchoolDict = ()=>{
+      schoolDict.value = [...defaultSchools];
+      saveSchoolDict();
+      toast('已恢复默认字典','info');
+    };
+
+    // ── Editing ──
+    const showEditCols = computed(()=>{
+      // Show columns that are most relevant for editing
+      const priority = ['序号','事件单编号','接警时间','报警人','案由类别','案由类型','事发地址','事件详情','处理结果','处警单位','学生身份证号','学生实际居住地址','学校','学校名称'];
+      const others = columns.value.filter(c=>!priority.includes(c));
+      return [...priority.filter(c=>columns.value.includes(c)), ...others];
+    });
+
+    const filteredEditData = computed(()=>{
+      let rows = fileData.value.map((r,i)=>({...r,_idx:i}));
+      // Search filter
+      if(editSearch.value){
+        const q = editSearch.value.toLowerCase();
+        rows = rows.filter(r=>{
+          return Object.values(r).some(v=>String(v).toLowerCase().includes(q));
+        });
+      }
+      // Column filter for matching
+      if(editColFilter.value){
+        rows = rows.filter(r=>{
+          const v = r[editColFilter.value];
+          return v && String(v).trim();
+        });
+      }
+      return rows;
+    });
+
+    const editTotalPages = computed(()=>Math.max(1,Math.ceil(filteredEditData.value.length/editPageSize)));
+
+    const startEdit = (rowIdx,col,event)=>{
+      editing.row = rowIdx;
+      editing.col = col;
+      editing.value = fileData.value[rowIdx][col] || '';
+      nextTick(()=>{
+        const inputs = document.querySelectorAll('[ref="editInput"]');
+        if(inputs.length) inputs[inputs.length-1].focus();
+      });
+    };
+
+    const commitEdit = ()=>{
+      if(editing.row>=0 && editing.col){
+        const origVal = originalData.value[editing.row] ? (originalData.value[editing.row][editing.col]||'') : '';
+        const newVal = editing.value;
+        if(newVal !== origVal){
+          const key = `${editing.row}-${editing.col}`;
+          modifiedCells.value[key] = newVal;
+          fileData.value[editing.row][editing.col] = newVal;
+        }
+      }
+      editing.row = -1;
+      editing.col = '';
+      editing.value = '';
+    };
+
+    const cancelEdit = ()=>{
+      editing.row = -1;
+      editing.col = '';
+      editing.value = '';
+    };
+
+    const nextEdit = (rowIdx,col)=>{
+      commitEdit();
+      const cols = showEditCols.value;
+      const ci = cols.indexOf(col);
+      const nextCi = ci+1;
+      if(nextCi < cols.length){
+        nextTick(()=>startEdit(rowIdx, cols[nextCi]));
+      } else if(rowIdx+1 < fileData.value.length){
+        nextTick(()=>startEdit(rowIdx+1, cols[0]));
+      }
+    };
+
+    const nextEditVertical = (rowIdx,col)=>{
+      commitEdit();
+      const cols = showEditCols.value;
+      const ci = cols.indexOf(col);
+      if(rowIdx+1 < fileData.value.length){
+        nextTick(()=>startEdit(rowIdx+1, cols[ci]));
+      }
+    };
+
+    const isDirty = (rowIdx,col)=>{
+      return !!modifiedCells.value[`${rowIdx}-${col}`];
+    };
+
+    const hasError = (rowIdx,col)=>{
+      return cleaningIssues.value.some(i=>i.row===rowIdx && i.col===col);
+    };
+
+    const getVal = (rowIdx,col)=>{
+      return fileData.value[rowIdx] ? (fileData.value[rowIdx][col]||'') : '';
+    };
+
+    const modifiedCount = computed(()=>Object.keys(modifiedCells.value).length);
+
+    // ── Export ──
+    const exportColumns = computed(()=>{
+      const base = [...columns.value];
+      // Ensure "学校名称" is included
+      if(!base.includes('学校名称')) base.push('学校名称');
+      // Add any extra columns after col 14
+      extraCols.value.forEach(c=>{
+        if(!base.includes(c)) base.push(c);
+      });
+      return base;
+    });
+
+    const getExportVal = (ri,col)=>{
+      const row = fileData.value[ri];
+      if(!row) return '';
+      return row[col] !== undefined ? row[col] : '';
+    };
+
+    const prepareExportData = ()=>{
+      return fileData.value.map(row=>{
+        const obj = {};
+        exportColumns.value.forEach(c=>{
+          obj[c] = row[c] !== undefined ? row[c] : '';
+        });
+        return obj;
+      });
+    };
+
+    const exportExcel = ()=>{
+      try{
+        const data = prepareExportData();
+        const ws = XLSX.utils.json_to_sheet(data);
+        // Set column widths
+        ws['!cols'] = exportColumns.value.map(c=>({wch: c==='处理结果'||c==='事件详情'?40: c==='学校名称'?20:15}));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '清洗结果');
+        const ts = new Date().toISOString().slice(0,10).replace(/-/g,'');
+        XLSX.writeFile(wb, `学生警情数据_已清洗_${ts}.xlsx`);
+        toast('导出成功！', 'success');
+      }catch(err){
+        toast('导出失败：'+err.message, 'error');
+      }
+    };
+
+    const exportCSV = ()=>{
+      try{
+        const data = prepareExportData();
+        const ws = XLSX.utils.json_to_sheet(data);
+        const csv = XLSX.utils.sheet_to_csv(ws);
+        const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=UTF-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ts = new Date().toISOString().slice(0,10).replace(/-/g,'');
+        a.download = `学生警情数据_已清洗_${ts}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('CSV导出成功！', 'success');
+      }catch(err){
+        toast('导出失败：'+err.message, 'error');
+      }
+    };
+
+    return {
+      tab,fileData,columns,extraCols,dragOver,
+      cleaningDone,cleaningIssues,phoneIssues,idIssues,dateIssues,emptyIssues,totalIssues,totalIssuesRows,
+      editing,modifiedCells,editSearch,editColFilter,editPage,editPageSize,editTotalPages,
+      extractDone,extractResults,extractCount,schoolDict,showSchoolDict,newSchoolName,
+      toastMsg,toastType,previewRows,showEditCols,filteredEditData,exportColumns,modifiedCount,
+      handleFile,handleDrop,runClean,autoFix,
+      runExtract,clearExtract,addSchool,removeSchool,resetSchoolDict,
+      startEdit,commitEdit,cancelEdit,nextEdit,nextEditVertical,isDirty,hasError,getVal,
+      getExportVal,exportExcel,exportCSV
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 学生110事件数据处理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f4f7f6;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            padding: 40px 30px;
+            background: #fff;
+        }
+        .login-card .brand-icon {
+            font-size: 3rem;
+            color: #4a90e2;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .login-card h4 {
+            text-align: center;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .form-control {
+            border-radius: 8px;
+            padding: 12px 15px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+        .form-control:focus {
+            box-shadow: none;
+            border-color: #4a90e2;
+            background-color: #fff;
+        }
+        .btn-login {
+            background-color: #4a90e2;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .btn-login:hover {
+            background-color: #357abd;
+        }
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
+            display: block;
+            text-decoration: none;
+            color: #4a90e2;
+        }
+        .version-info {
+            text-align: center;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <div class="brand-icon">
+            <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h4>系统登录</h4>
+        
+        <form action="{{ url_for('main.login') }}" method="POST">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} py-2 small">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <div class="mb-3">
+                <label class="form-label text-muted small">账号</label>
+                <input type="text" name="username" class="form-control" placeholder="请输入您的账号" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small">密码</label>
+                <input type="password" name="password" class="form-control" placeholder="请输入密码" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-login">登 录</button>
+        </form>
+
+        <a href="#" class="register-link"><small>还没有账号？点击注册</small></a>
+
+        <!-- 版本号和开发者标识规范要求位置 -->
+        <div class="version-info">
+            <small class="text-muted">版本 v1.0.0 | Developer: WQ</small>
+        </div>
+    </div>
+
+</body>
+</html>

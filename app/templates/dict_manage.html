@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}学校字典管理 - 学生110事件数据处理系统{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-book-open me-2"></i> 学校匹配字典管理</span>
+                <div>
+                    <button class="btn btn-sm btn-success me-2" id="btn-import-rules">
+                        <i class="fa-solid fa-file-import"></i> 批量导入
+                    </button>
+                    <input type="file" id="import-file-input" style="display: none;" accept=".xlsx, .xls">
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addRuleModal">
+                        <i class="fa-solid fa-plus"></i> 新增规则
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info py-2 small">
+                    <i class="fa-solid fa-circle-info me-2"></i> 提示：系统在进行数据补全时，会从“处理结果”等字段中检索包含“匹配关键词”的文字，并将对应记录的“学校名称”自动填充为“标准名称”。
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>序号</th>
+                                <th>匹配关键词 (如: 一中)</th>
+                                <th>标准名称 (如: 市第一中学)</th>
+                                <th class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td><span class="badge bg-secondary">{{ rule.keyword }}</span></td>
+                                <td><span class="text-primary">{{ rule.standard_name }}</span></td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-danger btn-delete" data-id="{{ rule.id }}">删除</button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">暂无字典规则，请添加</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="addRuleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新增学校字典规则</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">匹配关键词</label>
+                    <input type="text" class="form-control" id="input-keyword" placeholder="例如：实验小学">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">自动补全的标准名称</label>
+                    <input type="text" class="form-control" id="input-std-name" placeholder="例如：市实验小学（主校区）">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btn-save-rule">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('btn-save-rule').addEventListener('click', () => {
+        const keyword = document.getElementById('input-keyword').value;
+        const stdName = document.getElementById('input-std-name').value;
+        
+        if(!keyword || !stdName) {
+            Swal.fire('提示', '请填写完整', 'warning');
+            return;
+        }
+
+        fetch('{{ url_for("main.add_rule") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({keyword: keyword, standard_name: stdName})
+        })
+        .then(res => res.json())
+        .then(res => {
+            if(res.success) {
+                location.reload();
+            } else {
+                Swal.fire('失败', res.message, 'error');
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.getAttribute('data-id');
+            Swal.fire({
+                title: '确定删除该规则?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: '确定删除'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/rules/${id}`, {
+                        method: 'DELETE'
+                    }).then(res => res.json()).then(res => {
+                        if(res.success) location.reload();
+                    });
+                }
+            })
+        });
+    });
+
+    // 批量导入功能
+    const btnImport = document.getElementById('btn-import-rules');
+    const importFileInput = document.getElementById('import-file-input');
+
+    btnImport.addEventListener('click', () => {
+        Swal.fire({
+            title: '批量导入说明',
+            text: '请上传Excel文件。系统将默认读取第一列作为"匹配关键词"，第二列作为"标准名称"。已存在的关键词将被跳过。',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: '选择文件上传',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                importFileInput.click();
+            }
+        });
+    });
+
+    importFileInput.addEventListener('change', () => {
+        if (!importFileInput.files.length) return;
+        
+        const file = importFileInput.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+
+        Swal.fire({
+            title: '正在导入...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch('{{ url_for("main.import_rules") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(res => {
+            importFileInput.value = ''; // 清空选择
+            if(res.success) {
+                Swal.fire('导入成功', res.message, 'success').then(() => {
+                    location.reload();
+                });
+            } else {
+                Swal.fire('导入失败', res.message, 'error');
+            }
+        })
+        .catch(err => {
+            importFileInput.value = '';
+            Swal.fire('错误', '网络请求失败', 'error');
+        });
+    });
+</script>
+{% endblock %}

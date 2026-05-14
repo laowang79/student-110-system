@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}综合查询分析 - 学生110事件数据处理系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4" id="query-stats-row">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa-solid fa-database"></i> 系统总入库记录</h5>
+                <p class="card-text display-4 fw-bold">{{ total }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-info mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa-solid fa-school"></i> 包含学校名称记录</h5>
+                <p class="card-text display-4 fw-bold">{{ school_count }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light mb-3" style="border: 1px dashed #ccc;">
+            <div class="card-body text-center d-flex flex-column justify-content-center h-100">
+                <p class="mb-1 text-muted">提示：本页展示所有历史导入的持久化数据</p>
+                <small class="text-muted">（系统重启不会丢失，基于 SQLite 数据库保存）</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card" id="query-main-view">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-search me-2"></i> 历史数据总览 {% if current_user.get('role') != 'admin' %} (仅展示所属部门数据) {% endif %}</span>
+        <div>
+            <button class="btn btn-sm btn-outline-success me-2" id="btn-refresh"><i class="fa-solid fa-rotate-right"></i> 刷新数据</button>
+            {% if current_user.get('role') == 'admin' %}
+            <button class="btn btn-sm btn-primary" id="btn-export-query"><i class="fa-solid fa-download"></i> 导出数据报表</button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <!-- 查询/过滤器 -->
+        <div class="p-3 bg-light border-bottom d-flex gap-2">
+            <input type="text" id="filter-global" class="form-control" placeholder="全局搜索 (例如: 姓名、学校或关键字)..." style="max-width: 300px;">
+            <button class="btn btn-primary" id="btn-search">搜索</button>
+            <button class="btn btn-secondary" id="btn-reset">重置</button>
+        </div>
+        <div id="query-table"></div>
+    </div>
+</div>
+
+<!-- 卡片式修改视图 (查询页专用) -->
+<div class="card shadow-sm border-0 d-none" id="query-edit-view">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+        <span class="fw-bold text-primary fs-5"><i class="fa-solid fa-pen-to-square me-2"></i> 数据详细卡片修正</span>
+        <div>
+            <button class="btn btn-outline-secondary me-2" id="btn-cancel-edit"><i class="fa-solid fa-arrow-left"></i> 取消返回</button>
+            <button class="btn btn-success" id="btn-save-edit"><i class="fa-solid fa-check"></i> 保存修改</button>
+        </div>
+    </div>
+    <div class="card-body" style="background-color: #f4f7f6;">
+        <form id="edit-form">
+            <div class="row g-3" id="edit-form-content">
+                <!-- 动态生成的卡片表单将插入这里 -->
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let queryTable;
+    let currentRow = null;
+    let originalColumns = [];
+    const mainView = document.getElementById('query-main-view');
+    const editView = document.getElementById('query-edit-view');
+
+    function loadData() {
+        queryTable = new Tabulator("#query-table", {
+            ajaxURL: "{{ url_for('main.get_all_records') }}",
+            ajaxResponse: function(url, params, response) {
+                originalColumns = response.columns;
+                
+                // 限制在查询列表中显示的重点字段 (隐藏多余字段使页面干净)
+                const visibleFields = ['序号', '事件单编号', '接警时间', '处警单位', '报警人', '学校名称', '事件详情', '处理结果'];
+                
+                let columns = [];
+                if (response.columns && response.columns.length > 0) {
+                    columns = response.columns
+                        .filter(col => visibleFields.includes(col)) // 过滤只显示指定列
+                        .map(col => {
+                            return {
+                                title: col,
+                                field: col,
+                                // 移除了 headerFilter: "input"，去掉表头下方的空框
+                                formatter: function(cell){
+                                    let val = cell.getValue();
+                                    if(val && typeof val === 'string' && val.length > 20) {
+                                        return val.substring(0, 20) + '...';
+                                    }
+                                    return val;
+                                },
+                                tooltip: true
+                            };
+                    });
+                }
+                
+                // 添加操作列
+                columns.push({
+                    title: "操作",
+                    headerSort: false,
+                    formatter: function(){ 
+                        let html = "<button class='btn btn-sm btn-outline-primary py-0 me-1 btn-edit-row'><i class='fa-solid fa-pen'></i> 修正</button>"; 
+                        {% if current_user.get('role') == 'admin' %}
+                        html += "<button class='btn btn-sm btn-outline-danger py-0 btn-delete-row'><i class='fa-solid fa-trash'></i></button>";
+                        {% endif %}
+                        return html;
+                    },
+                    width: 130,
+                    hozAlign: "center",
+                    cellClick: function(e, cell){
+                        // 如果点的是删除按钮
+                        if(e.target.closest('.btn-delete-row')) {
+                            const data = cell.getRow().getData();
+                            Swal.fire({
+                                title: '确定删除此记录?', icon: 'warning', showCancelButton: true, confirmButtonText: '确定'
+                            }).then(res => {
+                                if(res.isConfirmed) {
+                                    fetch(`/api/records/delete/${data['事件单编号']}`, {method:'DELETE'})
+                                    .then(r=>r.json()).then(r=>{
+                                        if(r.success) cell.getRow().delete();
+                                    });
+                                }
+                            });
+                            return;
+                        }
+                        // 点的是修改按钮
+                        if(e.target.closest('.btn-edit-row')) {
+                            openEditView(cell.getRow());
+                        }
+                    }
+                });
+                
+                queryTable.setColumns(columns);
+                return response.data;
+            },
+            layout: "fitColumns",
+            movableColumns: true, // 允许列拖拽
+            height: "calc(100vh - 250px)",
+            pagination: "local",
+            paginationSize: 30, // 默认每页显示 30 条
+            paginationSizeSelector: [10, 30, 50], // 分页下拉选择框
+            placeholder: "暂无历史数据，请前往工作台导入...",
+            rowFormatter: function(row) {
+                var data = row.getData();
+                // 如果二级用户尚未修改过该条数据，显示浅色底纹提醒
+                if (data['_is_modified'] !== true && data['_is_modified'] !== 'true') {
+                    row.getElement().style.backgroundColor = "#fff3cd"; // 浅黄色提醒
+                    row.getElement().title = "提示：本条记录尚未进行核查补充";
+                } else {
+                    row.getElement().style.backgroundColor = "";
+                    row.getElement().title = "";
+                }
+            }
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", loadData);
+
+    // 开启编辑视图
+    function openEditView(row) {
+        currentRow = row;
+        const data = row.getData();
+        const contentDiv = document.getElementById('edit-form-content');
+        
+        const isAdmin = {{ 'true' if current_user.get('role') == 'admin' else 'false' }};
+
+        // 构建左右两列布局
+        contentDiv.innerHTML = `
+            <div class="col-lg-5 col-md-6 mb-3">
+                <div class="card h-100 border-primary shadow-sm">
+                    <div class="card-header bg-primary text-white fw-bold py-2">
+                        <i class="fa-solid fa-pen-to-square"></i> 需核查与补充信息 (允许修改)
+                    </div>
+                    <div class="card-body p-2" style="background-color: #f4f7f6; max-height: 85vh; overflow-y: auto;">
+                        <div class="row g-1" id="editable-container"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7 col-md-6 mb-3">
+                <div class="card h-100 border-secondary shadow-sm">
+                    <div class="card-header bg-secondary text-white fw-bold py-2">
+                        <i class="fa-solid fa-lock"></i> 基础警情信息 (${isAdmin ? '管理员可修改' : '系统仅做展示不能修改'})
+                    </div>
+                    <div class="card-body p-2" style="background-color: #e9ecef; max-height: 85vh; overflow-y: auto;">
+                        <div class="row g-1" id="readonly-container"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const editableContainer = document.getElementById('editable-container');
+        const readonlyContainer = document.getElementById('readonly-container');
+
+        // 定义允许操作员修改的重点字段前缀
+        const targetPrefixes = [
+            "报警人基本信", "学校名称", "学校阶段", "原因类型", 
+            "校内", "发案地点类型", "处置结果", "是否重复报警", 
+            "是否闭环", "下一步拟采取措施"
+        ];
+
+        function isTargetField(key) {
+            return targetPrefixes.some(prefix => key.includes(prefix));
+        }
+
+        originalColumns.forEach(key => {
+            if (data.hasOwnProperty(key)) {
+                const isTarget = isTargetField(key);
+                const isReadOnly = !isAdmin && !isTarget;
+                
+                // 判断是否给宽一点的空间 (针对长文本)
+                const isLongText = ['事件详情', '处理结果'].includes(key) || (typeof data[key] === 'string' && data[key].length > 40) || key.length > 15;
+                
+                let bgStyle = isReadOnly ? "background-color: #dee2e6; cursor: not-allowed;" : "background-color: #ffffff;";
+                let readonlyAttr = isReadOnly ? "readonly" : "";
+                
+                const colClass = isLongText ? 'col-12' : (isTarget ? 'col-12' : 'col-md-6');
+
+                const fieldHtml = `
+                    <div class="${colClass}">
+                        <div class="card h-100 shadow-sm" style="border: 1px solid #ced4da; border-radius: 4px; ${isReadOnly ? 'opacity: 0.85;' : ''}">
+                            <div class="card-body p-1 px-2">
+                                <label class="form-label text-secondary fw-bold mb-0" style="font-size: 0.75rem;"><i class="fa-solid fa-tag me-1"></i> ${key}</label>
+                                ${isLongText ? 
+                                    `<textarea class="form-control form-control-sm border-1 edit-input" data-key="${key}" rows="2" style="${bgStyle} font-size: 0.85rem;" ${readonlyAttr}>${data[key] || ''}</textarea>` : 
+                                    `<input type="text" class="form-control form-control-sm border-1 edit-input" data-key="${key}" value="${data[key] || ''}" style="${bgStyle} font-size: 0.85rem;" ${readonlyAttr}>`
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                if (isTarget) {
+                    editableContainer.insertAdjacentHTML('beforeend', fieldHtml);
+                } else {
+                    readonlyContainer.insertAdjacentHTML('beforeend', fieldHtml);
+                }
+            }
+        });
+
+        mainView.classList.add('d-none');
+        document.getElementById('query-stats-row').classList.add('d-none');
+        editView.classList.remove('d-none');
+    }
+    // 取消编辑
+    document.getElementById('btn-cancel-edit').addEventListener('click', () => {
+        editView.classList.add('d-none');
+        mainView.classList.remove('d-none');
+        document.getElementById('query-stats-row').classList.remove('d-none');
+        currentRow = null;
+    });
+
+    // 保存编辑
+    document.getElementById('btn-save-edit').addEventListener('click', () => {
+        if(currentRow) {
+            const inputs = document.querySelectorAll('.edit-input');
+            let newData = {};
+            inputs.forEach(input => newData[input.getAttribute('data-key')] = input.value);
+            
+            // 提交到后端更新数据库
+            fetch('{{ url_for("main.update_record") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newData)
+            }).then(res => res.json()).then(res => {
+                if(res.success) {
+                    newData['_is_modified'] = true;
+                    currentRow.update(newData);
+                    // 重新应用行格式化，清除浅黄色背景
+                    currentRow.reformat();
+                    Swal.fire({title: '修改已保存入库', icon: 'success', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000});
+                    editView.classList.add('d-none');
+                    mainView.classList.remove('d-none');
+        document.getElementById('query-stats-row').classList.remove('d-none');
+                    currentRow = null;
+                } else {
+                    Swal.fire('保存失败', res.message, 'error');
+                }
+            });
+        }
+    });
+
+    document.getElementById("btn-refresh").addEventListener("click", () => {
+        if(queryTable) queryTable.setData();
+    });
+
+    document.getElementById("btn-search").addEventListener("click", () => {
+        let val = document.getElementById("filter-global").value;
+        if(val) {
+            queryTable.setFilter(customFilter, val);
+        } else {
+            queryTable.clearFilter();
+        }
+    });
+
+    document.getElementById("btn-reset").addEventListener("click", () => {
+        document.getElementById("filter-global").value = '';
+        queryTable.clearFilter();
+    });
+
+    {% if current_user.get('role') == 'admin' %}
+    // 查询页面管理员全量导出功能
+    const btnExportQuery = document.getElementById('btn-export-query');
+    if (btnExportQuery) {
+        btnExportQuery.addEventListener('click', () => {
+            if(!queryTable) return;
+            // 获取当前经过搜索过滤的最新数据（不含未搜到的）
+            const currentData = queryTable.getData("active"); 
+            
+            Swal.fire({
+                title: '准备导出全量字段报表...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{{ url_for("main.export_data") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    data: currentData,
+                    columns: originalColumns // 使用最原始的全量表头顺序
+                })
+            })
+            .then(res => res.json())
+            .then(res => {
+                if(res.success) {
+                    Swal.close();
+                    window.location.href = res.download_url;
+                } else {
+                    Swal.fire('导出失败', res.message, 'error');
+                }
+            });
+        });
+    }
+    {% endif %}
+
+    function customFilter(data, filterParams) {
+        // 简单实现全局多字段模糊搜索
+        let match = false;
+        for (let key in data) {
+            if (data[key] && String(data[key]).includes(filterParams)) {
+                match = true;
+                break;
+            }
+        }
+        return match;
+    }
+</script>
+{% endblock %}
