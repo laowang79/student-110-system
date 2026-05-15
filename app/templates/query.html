@@ -5,7 +5,7 @@
 {% block content %}
 <div class="row mb-4" id="query-stats-row">
     <div class="col-md-4">
-        <div class="card text-white bg-primary mb-3">
+        <div class="card text-white bg-gradient-primary border-0 mb-3">
             <div class="card-body">
                 <h5 class="card-title"><i class="fa-solid fa-database"></i> 系统总入库记录</h5>
                 <p class="card-text display-4 fw-bold">{{ total }}</p>
@@ -13,7 +13,7 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card text-white bg-info mb-3">
+        <div class="card text-white bg-gradient-info border-0 mb-3">
             <div class="card-body">
                 <h5 class="card-title"><i class="fa-solid fa-school"></i> 包含学校名称记录</h5>
                 <p class="card-text display-4 fw-bold">{{ school_count }}</p>
@@ -21,7 +21,7 @@
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card bg-light mb-3" style="border: 1px dashed #ccc;">
+        <div class="card bg-white border-0 mb-3" style="">
             <div class="card-body text-center d-flex flex-column justify-content-center h-100">
                 <p class="mb-1 text-muted">提示：本页展示所有历史导入的持久化数据</p>
                 <small class="text-muted">（系统重启不会丢失，基于 SQLite 数据库保存）</small>
@@ -42,7 +42,7 @@
     </div>
     <div class="card-body p-0">
         <!-- 查询/过滤器 -->
-        <div class="p-3 bg-light border-bottom d-flex gap-2">
+        <div class="p-3 bg-white border-0 border-bottom d-flex gap-2">
             <input type="text" id="filter-global" class="form-control" placeholder="全局搜索 (例如: 姓名、学校或关键字)..." style="max-width: 300px;">
             <button class="btn btn-primary" id="btn-search">搜索</button>
             <button class="btn btn-secondary" id="btn-reset">重置</button>
@@ -182,7 +182,7 @@
         contentDiv.innerHTML = `
             <div class="col-lg-5 col-md-6 mb-3">
                 <div class="card h-100 border-primary shadow-sm">
-                    <div class="card-header bg-primary text-white fw-bold py-2">
+                    <div class="card-header bg-gradient-primary border-0 text-white fw-bold py-2">
                         <i class="fa-solid fa-pen-to-square"></i> 需核查与补充信息 (允许修改)
                     </div>
                     <div class="card-body p-2" style="background-color: #f4f7f6; max-height: 85vh; overflow-y: auto;">
