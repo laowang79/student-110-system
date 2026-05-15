@@ -15,3 +15,4 @@ instance/*.sqlite
 .vscode/*.xlsx
 *.xls
 *.csv
+offline_packages/
